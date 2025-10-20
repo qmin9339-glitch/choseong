@@ -588,7 +588,398 @@ const App = () => {
                 {content}
             </div>
         </div>
-    );
+    );<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>초성 챌린지 (GitHub Pages)</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load React, ReactDOM, and Babel -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        /* Custom CSS and Font for aesthetic */
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@100..900&display=swap');
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+        }
+        .animate-scorePop {
+            animation: scorePop 0.5s ease-out;
+        }
+        @keyframes scorePop {
+            0% { transform: scale(0.8); opacity: 0; }
+            50% { transform: scale(1.1); opacity: 1; }
+            100% { transform: scale(1); }
+        }
+        .animate-fadeIn {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+    </style>
+</head>
+<body class="bg-amber-50">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useCallback } = React;
+
+        // 문제 데이터 (모든 오류가 수정된 최종 버전)
+        const CHOSUNG_QUESTIONS = [
+            { chosung: 'ㅇㄴㅎㅅㅇ', category: '인사말', answer: '안녕하세요', difficulty: 1 },
+            { chosung: 'ㄱㅈ', category: '간식', answer: '과자', difficulty: 2 }, 
+            { chosung: 'ㅁㄱ', category: '동물', answer: '몽구', difficulty: 2 },
+            { chosung: 'ㅅㅁㅌㅍ', category: '기술', answer: '스마트폰', difficulty: 3 },
+            { chosung: 'ㅈㅈㄷ', category: '도시', answer: '제주도', difficulty: 3 },
+            { chosung: 'ㅅㅂ', category: '과일', 'answer': '수박', difficulty: 1 }, 
+            { chosung: 'ㄴㄱ', category: '지리', 'answer': '남극', difficulty: 2 },
+            { chosung: 'ㅇㅍㅌ', category: '건축', 'answer': '아파트', difficulty: 1 },
+            { chosung: 'ㅍㅇㄴ', category: '악기', 'answer': '피아노', difficulty: 3 }, 
+            { chosung: 'ㄷㅈㅉㄱ', category: '요리', 'answer': '된장찌개', difficulty: 2 },
+        ];
+
+        const TIMER_START = 10; // 문제당 시간 제한 (초)
+        const MAX_QUESTIONS = 5; // 게임당 문제 수
+        const HIGH_SCORE_KEY = 'chosung_high_score'; // Local Storage Key
+
+        // --- Local Storage Functions ---
+        const loadHighScore = () => {
+            const score = localStorage.getItem(HIGH_SCORE_KEY);
+            return score ? parseInt(score, 10) : 0;
+        };
+
+        const saveHighScore = (score) => {
+            if (score > loadHighScore()) {
+                localStorage.setItem(HIGH_SCORE_KEY, score);
+                return true;
+            }
+            return false;
+        };
+
+        const App = () => {
+            // Game State
+            const [phase, setPhase] = useState('start'); // 'start', 'playing', 'result'
+            const [score, setScore] = useState(0);
+            const [highScore, setHighScore] = useState(loadHighScore); // Local Storage에서 로드
+            const [timeLeft, setTimeLeft] = useState(TIMER_START);
+            const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+            const [currentQuestion, setCurrentQuestion] = useState(null);
+            const [answerInput, setAnswerInput] = useState('');
+            const [feedback, setFeedback] = useState({ text: '', type: '' });
+            const [isNewHighScore, setIsNewHighScore] = useState(false);
+            
+            // State for showing the correct answer after a wrong attempt
+            const [showAnswer, setShowAnswer] = useState(false); 
+            const [correctAnswerText, setCorrectAnswerText] = useState('');
+            const [lastWrongInput, setLastWrongInput] = useState('');
+
+            const timerRef = useRef(null);
+
+            // 6. Game End Handler
+            const handleGameEnd = useCallback(() => {
+                clearInterval(timerRef.current);
+                setPhase('result');
+
+                // Local Storage에 최고 점수 저장 시도
+                const isNew = saveHighScore(score);
+                if (isNew) {
+                    setHighScore(score);
+                    setIsNewHighScore(true);
+                } else {
+                    setIsNewHighScore(false);
+                }
+            }, [score]);
+
+            // Helper function to move to the next question
+            const handleNextQuestion = useCallback(() => {
+                const nextIndex = currentQuestionIndex + 1;
+                if (nextIndex < MAX_QUESTIONS) {
+                    setCurrentQuestionIndex(nextIndex);
+                    setTimeLeft(TIMER_START); // Reset timer
+                    setAnswerInput(''); // Clear input
+                } else {
+                    handleGameEnd(); // All questions completed
+                }
+            }, [currentQuestionIndex, handleGameEnd]);
+
+            // --- Time Out Handler ---
+            const handleTimeOut = useCallback(() => {
+                clearInterval(timerRef.current);
+                
+                if (!currentQuestion) return;
+                
+                const qData = currentQuestion[currentQuestionIndex];
+                
+                setLastWrongInput('시간 초과');
+                setCorrectAnswerText(qData.answer);
+                setShowAnswer(true); 
+                setFeedback({ text: '시간 초과!', type: 'wrong' });
+                
+                setTimeout(() => {
+                    setFeedback({ text: '', type: '' });
+                    setShowAnswer(false);
+                    setCorrectAnswerText('');
+                    setLastWrongInput('');
+                    handleNextQuestion(); 
+                }, 2000); 
+
+            }, [currentQuestion, currentQuestionIndex, handleNextQuestion]);
+
+            // 3. Timer Logic
+            useEffect(() => {
+                // 피드백이 표시되는 동안에는 타이머를 멈춥니다.
+                if (phase === 'playing' && timeLeft > 0 && !feedback.text) { 
+                    timerRef.current = setInterval(() => {
+                        setTimeLeft(prev => prev - 1);
+                    }, 1000);
+                } else if (phase === 'playing' && timeLeft === 0 && !feedback.text) {
+                    clearInterval(timerRef.current);
+                    handleTimeOut(); 
+                }
+                return () => clearInterval(timerRef.current);
+            }, [phase, timeLeft, feedback.text, handleTimeOut]);
+
+            // 4. Start Game
+            const startGame = useCallback(() => {
+                // Shuffle questions and select MAX_QUESTIONS
+                const shuffledQuestions = [...CHOSUNG_QUESTIONS].sort(() => Math.random() - 0.5);
+                const gameQuestions = shuffledQuestions.slice(0, MAX_QUESTIONS);
+                
+                // 최고 점수 로컬 스토리지에서 다시 로드 (혹시 다른 탭에서 업데이트되었을 경우 대비)
+                setHighScore(loadHighScore()); 
+
+                setCurrentQuestion(gameQuestions);
+                setCurrentQuestionIndex(0);
+                setScore(0);
+                setAnswerInput('');
+                setTimeLeft(TIMER_START);
+                setFeedback({ text: '', type: '' });
+                setShowAnswer(false);
+                setCorrectAnswerText('');
+                setLastWrongInput('');
+                setPhase('playing');
+                setIsNewHighScore(false);
+            }, []);
+
+            // 5. Handle Answer Submission
+            const handleSubmitAnswer = (e) => {
+                e.preventDefault();
+                if (phase !== 'playing' || !currentQuestion || feedback.text) return; 
+
+                const submittedAnswer = answerInput.trim().toLowerCase();
+                const wrongInputForDisplay = answerInput.trim();
+                const qData = currentQuestion[currentQuestionIndex];
+                const correctAnswer = qData.answer.trim().toLowerCase();
+                
+                setAnswerInput(''); // Clear input immediately
+
+                if (submittedAnswer === correctAnswer) {
+                    // Correct Answer handling
+                    const bonus = timeLeft * 1;
+                    const points = 10 + bonus;
+                    setScore(prev => prev + points);
+                    setFeedback({ text: `정답! (+${points}점)`, type: 'correct' });
+                    
+                    // Move to next question (short delay)
+                    setTimeout(() => {
+                        setFeedback({ text: '', type: '' });
+                        handleNextQuestion();
+                    }, 500);
+
+                } else {
+                    // Wrong Answer handling: Show answer and move to next question
+                    setLastWrongInput(wrongInputForDisplay);
+                    setCorrectAnswerText(qData.answer);
+                    setShowAnswer(true);
+                    setFeedback({ text: '오답!', type: 'wrong' });
+                    
+                    // Wait 2 seconds, then clear feedback, hide answer, and move on
+                    setTimeout(() => {
+                        setFeedback({ text: '', type: '' });
+                        setShowAnswer(false);
+                        setCorrectAnswerText('');
+                        setLastWrongInput('');
+                        handleNextQuestion(); 
+                    }, 2000);
+                }
+            };
+
+            // --- UI Rendering Functions ---
+
+            const renderStartScreen = () => (
+                <div className="flex flex-col items-center justify-center p-6 text-center">
+                    <h1 className="text-5xl font-extrabold text-orange-800 mb-4">초성 챌린지</h1>
+                    <p className="text-lg text-gray-700 mb-8">어휘력에 도전해보세요!</p>
+                    <div className="w-full max-w-sm p-4 bg-white rounded-xl shadow-lg mb-6 border border-amber-200">
+                        <p className="text-xl font-semibold text-gray-800">나의 최고 점수: <span className="text-red-700">{highScore}</span>점</p>
+                        <p className="text-sm text-gray-500 mt-1">※ 점수는 브라우저에 저장됩니다.</p>
+                    </div>
+                    
+                    <button 
+                        onClick={startGame} 
+                        className="w-full max-w-xs py-4 bg-red-800 hover:bg-red-900 text-white text-2xl font-bold rounded-full shadow-lg transform transition duration-150 active:scale-95"
+                    >
+                        게임 시작 (총 {MAX_QUESTIONS}문제)
+                    </button>
+                    <div className="mt-8 text-xs text-gray-400">
+                        <p>GitHub Pages 호스팅을 위해 백엔드(Firebase) 기능이 제거되었습니다.</p>
+                        <p>개인의 최고 점수만 로컬 브라우저 저장소에 기록됩니다.</p>
+                    </div>
+                </div>
+            );
+
+            const renderPlayingScreen = () => {
+                if (!currentQuestion) return null;
+                const qData = currentQuestion[currentQuestionIndex];
+                const progress = ((currentQuestionIndex) / MAX_QUESTIONS) * 100;
+                const isInputDisabled = !!feedback.text;
+
+                return (
+                    <div className="flex flex-col h-full p-4">
+                        {/* Header and Timer */}
+                        <div className="flex justify-between items-center mb-6">
+                            <div className="text-xl font-bold text-gray-700">SCORE: <span className="text-orange-700 text-3xl">{score}</span></div>
+                            <div className="flex items-center space-x-2">
+                                <span className="text-sm font-semibold text-gray-500">남은 시간:</span>
+                                <div className={`text-4xl font-extrabold ${timeLeft <= 3 ? 'text-red-700 animate-pulse' : 'text-red-600'}`}>
+                                    {timeLeft}s
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Progress Bar */}
+                        <div className="w-full h-2 bg-amber-200 rounded-full mb-6 overflow-hidden">
+                            <div 
+                                className="h-full bg-orange-500 transition-all duration-300 ease-out" 
+                                style={{ width: `${progress}%` }}
+                            ></div>
+                        </div>
+                        <p className="text-sm text-gray-500 mb-4 text-center">
+                            {currentQuestionIndex + 1} / {MAX_QUESTIONS} 문제
+                        </p>
+
+                        {/* Question/Answer Area */}
+                        <div className="flex-grow flex flex-col items-center justify-center bg-white p-6 rounded-2xl shadow-xl border-4 border-amber-500">
+                            <div className="text-md font-semibold text-amber-800 bg-amber-200 px-4 py-1 rounded-full mb-4">
+                                카테고리: {qData.category}
+                            </div>
+                            {/* Display correct answer if showAnswer is true */}
+                            {showAnswer ? (
+                                <div className="text-5xl md:text-6xl font-black tracking-normal text-green-700 animate-fadeIn text-center">
+                                    <p className="text-xl font-medium text-red-500 mb-4">
+                                        ❌ {lastWrongInput === '시간 초과' ? '시간 초과로 놓쳤습니다.' : `당신의 오답: "${lastWrongInput}"`}
+                                    </p>
+                                    
+                                    <span className="text-gray-500 text-xl">정답은</span><br/>
+                                    {correctAnswerText}
+                                </div>
+                            ) : (
+                                <div className="8xl md:text-9xl font-black tracking-widest text-gray-800 animate-fadeIn">
+                                    {qData.chosung}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Local Feedback Indicator */}
+                        {feedback.text && (
+                            <div className={`mt-4 p-3 rounded-xl text-center font-bold text-2xl transition-all duration-300 animate-fadeIn ${
+                                feedback.type === 'correct' ? 'bg-green-100 text-green-700 border-2 border-green-300' : 'bg-red-100 text-red-700 border-2 border-red-300'
+                            }`}>
+                                {feedback.text}
+                            </div>
+                        )}
+
+                        {/* Input and Submit Form */}
+                        <form onSubmit={handleSubmitAnswer} className="mt-6">
+                            <input
+                                type="text"
+                                value={answerInput}
+                                onChange={(e) => setAnswerInput(e.target.value)}
+                                placeholder="정답을 입력하세요..."
+                                className="w-full p-4 border-4 border-orange-300 rounded-xl text-xl text-center focus:border-orange-500 focus:outline-none transition duration-150"
+                                autoFocus
+                                disabled={isInputDisabled}
+                            />
+                            <button
+                                type="submit"
+                                disabled={answerInput.trim().length === 0 || isInputDisabled}
+                                className="w-full mt-3 py-4 bg-red-600 hover:bg-red-700 text-white text-xl font-bold rounded-xl shadow-lg disabled:bg-gray-400 transform transition duration-150 active:scale-95"
+                            >
+                                정답 제출
+                            </button>
+                        </form>
+                    </div>
+                );
+            };
+
+            const renderResultScreen = () => (
+                <div className="flex flex-col items-center justify-center p-6 text-center">
+                    <h1 className="text-5xl font-extrabold text-gray-800 mb-6">게임 결과</h1>
+                    
+                    <div className="bg-white p-8 rounded-2xl shadow-2xl border-4 border-red-700 w-full max-w-sm">
+                        <p className="text-lg text-gray-600 mb-3">최종 점수</p>
+                        <div className="text-7xl font-black text-orange-800 mb-4 animate-scorePop">
+                            {score}
+                        </div>
+                        
+                        {isNewHighScore && (
+                            <div className="text-xl font-bold text-yellow-600 bg-yellow-100 p-2 rounded-lg mb-6 shadow-md animate-bounce">
+                                🎉 최고 점수 갱신!
+                            </div>
+                        )}
+                        
+                        <p className="text-lg text-gray-600 mt-4">나의 최고 점수: {highScore}점</p>
+                    </div>
+                    
+                    <button 
+                        onClick={startGame} 
+                        className="w-full max-w-sm mt-8 py-4 bg-red-800 hover:bg-red-900 text-white text-xl font-bold rounded-full shadow-lg transform transition duration-150 active:scale-95"
+                    >
+                        다시 시작
+                    </button>
+                    <button 
+                        onClick={() => setPhase('start')} 
+                        className="w-full max-w-sm mt-3 py-3 bg-amber-600 hover:bg-amber-700 text-white text-lg font-semibold rounded-full shadow-md transition duration-150 active:scale-95"
+                    >
+                        메인 화면으로
+                    </button>
+                </div>
+            );
+
+            // Main Component Rendering
+            let content;
+            switch (phase) {
+                case 'playing':
+                    content = renderPlayingScreen();
+                    break;
+                case 'result':
+                    content = renderResultScreen();
+                    break;
+                case 'start':
+                default:
+                    content = renderStartScreen();
+            }
+
+            return (
+                <div className="min-h-screen bg-amber-50 flex items-center justify-center p-4">
+                    <div className="w-full max-w-lg min-h-[600px] bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col">
+                        {content}
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
+
 };
 
 export default App;
